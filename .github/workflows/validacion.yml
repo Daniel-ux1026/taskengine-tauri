@@ -1,0 +1,59 @@
+name: Validación de TaskEngine
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validacion-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  interfaz:
+    name: Interfaz y pruebas (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Comprobar TypeScript
+        run: npm run lint
+      - name: Probar persistencia y recordatorios
+        run: npm test
+      - name: Compilar interfaz
+        run: npm run build
+
+  nativo:
+    name: Rust y Tauri (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Preparar Rust estable
+        run: rustup update stable --no-self-update
+      - name: Seleccionar Rust estable
+        run: rustup default stable
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Compilar interfaz
+        run: npm run build
+      - name: Comprobar formato Rust
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Comprobar código nativo
+        run: cargo check --manifest-path src-tauri/Cargo.toml --locked
