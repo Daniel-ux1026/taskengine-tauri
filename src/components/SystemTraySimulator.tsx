@@ -33,7 +33,7 @@ export const SystemTraySimulator: React.FC<Props> = ({
 
   const handleManualCheck = async () => {
     await onCheckAlerts();
-    setLastCheckMessage('Comprobación completada: Base de datos SQLite sincronizada');
+    setLastCheckMessage('Comprobación completada: Datos del navegador revisados');
     setTimeout(() => setLastCheckMessage(null), 3000);
   };
 
@@ -46,12 +46,12 @@ export const SystemTraySimulator: React.FC<Props> = ({
         </div>
 
         <h2 className="text-xl font-bold text-white tracking-tight">
-          TaskEngine está Minimizado en la Bandeja del Sistema (System Tray)
+          Demostración de la bandeja del sistema
         </h2>
 
         <p className="text-sm text-neutral-400 max-w-lg mx-auto leading-relaxed">
-          La ventana principal está oculta, pero el proceso sigue activo en segundo plano.
-          Las notificaciones nativas de 1 día (24h) y 12 horas antes del vencimiento se dispararán automáticamente.
+          En el navegador esta pantalla simula la bandeja. Mantén la pestaña abierta para revisar plazos.
+          La aplicación de escritorio sí dispone de un icono nativo para ocultar y restaurar su ventana.
         </p>
 
         {/* Live background daemon stats */}
@@ -105,7 +105,7 @@ export const SystemTraySimulator: React.FC<Props> = ({
             <div className="absolute bottom-14 right-4 w-72 bg-neutral-900 border border-neutral-700/80 rounded-xl shadow-2xl overflow-hidden p-1.5 text-xs z-20 animate-in slide-in-from-bottom-2 duration-150">
               <div className="px-3 py-2 border-b border-neutral-800 flex items-center justify-between">
                 <span className="font-semibold text-white">TaskEngine Tauri Tray</span>
-                <span className="text-[10px] text-emerald-400 font-mono">SQLite OK</span>
+                <span className="text-[10px] text-emerald-400 font-mono">Modo web</span>
               </div>
 
               <div className="py-1">
@@ -138,7 +138,7 @@ export const SystemTraySimulator: React.FC<Props> = ({
                   className="w-full text-left px-3 py-1.5 hover:bg-red-950/40 text-red-400 rounded flex items-center gap-2"
                 >
                   <Power className="w-3.5 h-3.5" />
-                  <span>Cerrar completamente</span>
+                  <span>Volver a la aplicación</span>
                 </button>
               </div>
             </div>

@@ -5,7 +5,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Task, Course, TaskStatus } from './types/task';
-import { sqliteService } from './db/sqlite';
+import { sqliteService, isTauriEnvironment } from './db/sqlite';
+import { getTauriWindow } from './utils/tauriBridge';
 import { notificationService } from './services/notificationService';
 import { trayService, TrayState } from './services/trayService';
 import { Header } from './components/Header';
@@ -23,6 +24,8 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const native = isTauriEnvironment();
   const [activeView, setActiveView] = useState<'board' | 'list'>('board');
 
   // Filter & Search states
@@ -44,6 +47,7 @@ export default function App() {
   // Load Initial Data
   const loadData = useCallback(async () => {
     try {
+      setError(null);
       const [loadedTasks, loadedCourses] = await Promise.all([
         sqliteService.getTasks(),
         sqliteService.getCourses(),
@@ -52,6 +56,7 @@ export default function App() {
       setCourses(loadedCourses);
     } catch (err) {
       console.error('Error al cargar datos desde SQLite:', err);
+      setError('No se pudieron cargar los datos. Revisa el almacenamiento y vuelve a intentar con el botón de actualizar.');
     } finally {
       setIsLoading(false);
     }
@@ -82,6 +87,15 @@ export default function App() {
       notificationService.stopBackgroundDaemon();
     };
   }, [loadData]);
+
+  useEffect(() => {
+    const window = getTauriWindow();
+    if (!window) return;
+    const subscription = window.onFocusChanged(({ payload }) => {
+      if (payload) void trayService.restoreFromTray();
+    });
+    return () => { void subscription.then((unlisten) => unlisten()); };
+  }, []);
 
   // Actualizar conteos en el System Tray
   useEffect(() => {
@@ -177,13 +191,17 @@ export default function App() {
   };
 
   const handleDeleteTask = async (id: string) => {
-    await sqliteService.deleteTask(id);
-    await loadData();
+    try {
+      await sqliteService.deleteTask(id);
+      await loadData();
+    } catch { setError('No se pudo eliminar la tarea. Inténtalo de nuevo.'); }
   };
 
   const handleStatusChange = async (id: string, newStatus: TaskStatus) => {
-    await sqliteService.updateTask(id, { status: newStatus });
-    await loadData();
+    try {
+      await sqliteService.updateTask(id, { status: newStatus });
+      await loadData();
+    } catch { setError('No se pudo actualizar el estado. Inténtalo de nuevo.'); }
   };
 
   const handleAddCourse = async (name: string, code: string): Promise<Course> => {
@@ -232,7 +250,7 @@ export default function App() {
               </span>
             </h1>
             <p className="text-xs text-neutral-400 mt-0.5">
-              Base de datos SQLite local · Notificaciones automáticas 1 día y 12h antes · Segundo plano activo
+              {native ? 'SQLite local · Alertas a 24h y 12h con la aplicación abierta' : 'Demostración con datos de ejemplo · Guardado en este navegador'}
             </p>
           </div>
 
@@ -255,6 +273,7 @@ export default function App() {
         </div>
 
         {/* Barra de Estadísticas y Métricas de Plazos */}
+        {error && <p role="alert" className="mb-4 p-3 rounded-lg bg-red-950/40 text-red-300 text-sm">{error}</p>}
         <StatisticsBar
           tasks={tasks}
           onFilterUrgent={() => setSelectedUrgency('urgent_12h')}
@@ -280,7 +299,7 @@ export default function App() {
         {isLoading ? (
           <div className="h-64 flex flex-col items-center justify-center space-y-2 text-neutral-500">
             <div className="w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs font-mono">Cargando base de datos SQLite...</span>
+            <span className="text-xs font-mono">Cargando tus tareas...</span>
           </div>
         ) : activeView === 'board' ? (
           <TaskBoard
@@ -318,7 +337,7 @@ export default function App() {
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span className="font-mono">SQLite: tasks_university.db (Conectado)</span>
+            <span className="font-mono">{error ? 'Almacenamiento: revisar conexión' : native ? 'SQLite: tasks_university.db' : 'Datos: localStorage del navegador'}</span>
           </span>
           <span className="text-neutral-700">|</span>
           <span className="flex items-center gap-1">
@@ -371,11 +390,11 @@ export default function App() {
         onClose={() => setIsTauriModalOpen(false)}
       />
 
-      <SystemTraySimulator
+      {!native && <SystemTraySimulator
         trayState={trayState}
         onRestore={() => trayService.restoreFromTray()}
         onCheckAlerts={handleTriggerManualCheck}
-      />
+      />}
     </div>
   );
 }

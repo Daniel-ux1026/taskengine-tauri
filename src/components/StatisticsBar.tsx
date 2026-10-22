@@ -81,7 +81,7 @@ export const StatisticsBar: React.FC<Props> = ({ tasks, onFilterUrgent, onFilter
           {urgentes12h}
         </div>
         <div className="text-[11px] text-red-400/80 mt-1">
-          Notificación OS activa
+          Entrega próxima
         </div>
       </button>
 

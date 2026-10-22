@@ -1,8 +1,8 @@
 [package]
 name = "taskengine-tauri"
-version = "0.1.0"
+version = "1.0.0"
 description = "Gestor local de tareas universitarias para Ingeniería de Sistemas con SQLite y System Tray"
-authors = ["Ingeniería de Sistemas"]
+authors = ["Daniel-ux1026"]
 edition = "2021"
 
 [lib]
@@ -16,8 +16,4 @@ tauri-build = { version = "2.0", features = [] }
 tauri = { version = "2.0", features = ["tray-icon"] }
 tauri-plugin-sql = { version = "2.0", features = ["sqlite"] }
 tauri-plugin-notification = "2.0"
-tauri-plugin-process = "2.0"
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-tokio = { version = "1.0", features = ["full"] }

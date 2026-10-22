@@ -2,5 +2,5 @@
   "name": "TaskEngine Tauri - Gestor de Tareas Universitarias",
   "description": "Aplicación de escritorio local con React, Tauri y SQLite para ingeniería de sistemas con modo oscuro, notificaciones de 1 día y 12 horas, y system tray.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

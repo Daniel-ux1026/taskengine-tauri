@@ -31,16 +31,17 @@ export const NotificationCenterModal: React.FC<Props> = ({
   const [hasPermission, setHasPermission] = useState(false);
   const [logs, setLogs] = useState<NotificationLog[]>([]);
   const [testingAlert, setTestingAlert] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const reloadLogs = async () => {
     const list = await sqliteService.getNotificationLogs();
     setLogs(list);
-    setHasPermission(notificationService.isPermissionGranted());
+    setHasPermission(await notificationService.refreshPermission());
   };
 
   useEffect(() => {
     if (isOpen) {
-      reloadLogs();
+      reloadLogs().catch(() => setError('No se pudo cargar el historial de notificaciones.'));
     }
   }, [isOpen]);
 
@@ -59,15 +60,21 @@ export const NotificationCenterModal: React.FC<Props> = ({
 
   const handleTestAlert = async (type: '24_hours' | '12_hours') => {
     setTestingAlert(type);
-    await notificationService.testAlert(
-      type,
-      type === '12_hours'
-        ? 'Laboratorio 3: Árboles B+ y Sharding Raft'
-        : 'Entrega de Avance: Arquitectura Microservicios',
-      type === '12_hours' ? 'Algoritmos y Estructuras' : 'Arquitectura de Software'
-    );
-    await reloadLogs();
-    setTimeout(() => setTestingAlert(null), 1000);
+    setError(null);
+    try {
+      await notificationService.testAlert(
+        type,
+        type === '12_hours'
+          ? 'Laboratorio 3: Árboles B+ y Sharding Raft'
+          : 'Entrega de Avance: Arquitectura Microservicios',
+        type === '12_hours' ? 'Algoritmos y Estructuras' : 'Arquitectura de Software'
+      );
+      await reloadLogs();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'No se pudo enviar la prueba.');
+    } finally {
+      setTestingAlert(null);
+    }
   };
 
   return (
@@ -98,6 +105,7 @@ export const NotificationCenterModal: React.FC<Props> = ({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
+          {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
           {/* Permission Status Box */}
           <div className="p-4 bg-neutral-950 border border-neutral-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">

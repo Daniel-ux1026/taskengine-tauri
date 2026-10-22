@@ -70,7 +70,8 @@ export const TaskModal: React.FC<Props> = ({
     }
     setError(null);
     setShowNewCourseInput(false);
-  }, [taskToEdit, isOpen, courses]);
+    setTagInput('');
+  }, [taskToEdit, isOpen]);
 
   if (!isOpen) return null;
 
@@ -114,7 +115,15 @@ export const TaskModal: React.FC<Props> = ({
     }
 
     const selectedCourse = courses.find((c) => c.id === courseId);
-    const fullDeadline = new Date(`${deadlineDate}T${deadlineTime || '23:59'}:00`).toISOString();
+    const selectedDeadline = new Date(`${deadlineDate}T${deadlineTime || '23:59'}:00`);
+    if (!Number.isFinite(selectedDeadline.getTime())) {
+      setError('La fecha y la hora de entrega no son válidas.');
+      return;
+    }
+    const previousDeadline = taskToEdit ? new Date(taskToEdit.deadline) : null;
+    // El formulario muestra minutos: conservar segundos originales al editar otros campos.
+    const sameMinute = previousDeadline && Math.floor(previousDeadline.getTime() / 60000) === Math.floor(selectedDeadline.getTime() / 60000);
+    const fullDeadline = sameMinute ? taskToEdit!.deadline : selectedDeadline.toISOString();
 
     setIsSubmitting(true);
     setError(null);
@@ -130,9 +139,6 @@ export const TaskModal: React.FC<Props> = ({
           priority,
           description: description.trim(),
           tags,
-          // Si la fecha cambia al futuro, resetear banderas de notificación
-          notified_24h: new Date(fullDeadline).getTime() > Date.now() + 24 * 3600 * 1000 ? 0 : taskToEdit.notified_24h,
-          notified_12h: new Date(fullDeadline).getTime() > Date.now() + 12 * 3600 * 1000 ? 0 : taskToEdit.notified_12h,
         });
       } else {
         await onSave({
@@ -148,7 +154,7 @@ export const TaskModal: React.FC<Props> = ({
       }
       onClose();
     } catch (err) {
-      setError('Error al guardar en la base de datos SQLite.');
+      setError('No se pudo guardar la tarea. Revisa los datos e inténtalo de nuevo.');
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -165,7 +171,7 @@ export const TaskModal: React.FC<Props> = ({
               {taskToEdit ? 'Editar Tarea Universitaria' : 'Nueva Tarea de Ingeniería'}
             </h2>
             <p className="text-xs text-neutral-400 mt-0.5">
-              Almacenamiento persistente en SQLite local y monitoreo continuo
+              Tareas guardadas en este dispositivo y seguimiento de entregas
             </p>
           </div>
           <button
@@ -240,7 +246,7 @@ export const TaskModal: React.FC<Props> = ({
                   onClick={handleCreateCustomCourse}
                   className="px-3 py-1 text-xs font-medium bg-neutral-800 hover:bg-neutral-700 text-sky-400 rounded transition-colors"
                 >
-                  Guardar Curso en SQLite
+                  Guardar Curso
                 </button>
               </div>
             ) : (

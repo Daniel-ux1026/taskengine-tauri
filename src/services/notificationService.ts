@@ -41,17 +41,19 @@ export const playNotificationChime = (urgency: 'high' | 'normal' = 'normal') => 
     osc2.start();
     osc1.stop(ctx.currentTime + 0.45);
     osc2.stop(ctx.currentTime + 0.45);
+    osc2.onended = () => { void ctx.close(); };
   } catch {
     // Si el navegador bloquea audio antes de interacción de usuario, ignorar silenciosamente
   }
 };
 
-class NotificationService {
+export class NotificationService {
   private permissionGranted: boolean = false;
   private intervalId: number | null = null;
   private listeners: Array<() => void> = [];
+  private checking: Promise<{ triggeredCount: number }> | null = null;
 
-  constructor() {
+  constructor(private store: Pick<typeof sqliteService, 'updateTask' | 'addNotificationLog'> = sqliteService) {
     this.checkInitialPermission();
   }
 
@@ -62,10 +64,6 @@ class NotificationService {
   }
 
   public async requestPermission(): Promise<boolean> {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      return false;
-    }
-
     try {
       if (isTauri()) {
         const notif = getTauriNotification();
@@ -76,6 +74,7 @@ class NotificationService {
         }
       }
 
+      if (typeof window === 'undefined' || !('Notification' in window)) return false;
       const permission = await Notification.requestPermission();
       this.permissionGranted = permission === 'granted';
       return this.permissionGranted;
@@ -86,10 +85,17 @@ class NotificationService {
   }
 
   public isPermissionGranted(): boolean {
+    if (isTauri()) return this.permissionGranted;
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission === 'granted';
     }
     return false;
+  }
+
+  public async refreshPermission(): Promise<boolean> {
+    const native = getTauriNotification();
+    this.permissionGranted = native ? await native.isPermissionGranted() : this.isPermissionGranted();
+    return this.permissionGranted;
   }
 
   public subscribe(cb: () => void) {
@@ -105,33 +111,38 @@ class NotificationService {
 
   // Despacho de la notificación al Sistema Operativo
   public async dispatchOSNotification(title: string, body: string, urgency: 'high' | 'normal' = 'normal') {
-    playNotificationChime(urgency);
-
-    if (this.isPermissionGranted()) {
-      try {
-        if (isTauri()) {
-          const notif = getTauriNotification();
-          if (notif && typeof notif.sendNotification === 'function') {
-            notif.sendNotification({ title, body });
-            return;
-          }
+    try {
+      if (!await this.refreshPermission()) return false;
+      if (isTauri()) {
+        const notif = getTauriNotification();
+        if (notif && typeof notif.sendNotification === 'function') {
+          notif.sendNotification({ title, body });
+          playNotificationChime(urgency);
+          return true;
         }
-
-        new Notification(title, {
-          body,
-          icon: '/favicon.ico',
-          tag: 'taskengine-alert',
-          silent: false,
-        });
-      } catch (err) {
-        console.warn('No se pudo enviar notificación nativa:', err);
       }
+
+      new Notification(title, {
+        body,
+        tag: title,
+        silent: false,
+      });
+      playNotificationChime(urgency);
+      return true;
+    } catch (err) {
+      console.warn('No se pudo enviar notificación nativa:', err);
+      return false;
     }
   }
 
 
   // Motor de verificación de tareas: Evalúa las reglas de 24h y 12h
-  public async checkDeadlines(tasks: Task[]): Promise<{ triggeredCount: number }> {
+  public checkDeadlines(tasks: Task[]): Promise<{ triggeredCount: number }> {
+    if (!this.checking) this.checking = this.evaluateDeadlines(tasks).finally(() => { this.checking = null; });
+    return this.checking;
+  }
+
+  private async evaluateDeadlines(tasks: Task[]): Promise<{ triggeredCount: number }> {
     const now = Date.now();
     let triggeredCount = 0;
 
@@ -145,14 +156,15 @@ class NotificationService {
       // Regla 2: Alerta Crítica de 12 Horas
       if (remainingHours <= 12 && remainingHours > 0 && task.notified_12h === 0) {
         const hoursLeftFormatted = Math.max(0.1, remainingHours).toFixed(1);
-        await this.dispatchOSNotification(
+        const sent = await this.dispatchOSNotification(
           `🚨 Tarea por Vencer en ${hoursLeftFormatted}h: ${task.title}`,
           `Curso: ${task.course_name} — Quedan menos de 12 horas para la entrega.`,
           'high'
         );
+        if (!sent) continue;
 
-        await sqliteService.updateTask(task.id, { notified_12h: 1, notified_24h: 1 });
-        await sqliteService.addNotificationLog({
+        await this.store.updateTask(task.id, { notified_12h: 1, notified_24h: 1 });
+        await this.store.addNotificationLog({
           task_id: task.id,
           task_title: task.title,
           alert_type: '12_hours',
@@ -165,7 +177,7 @@ class NotificationService {
       // Regla 1: Alerta Preventiva de 1 Día (24 Horas)
       else if (remainingHours <= 24 && remainingHours > 12 && task.notified_24h === 0) {
         const hoursLeftFormatted = remainingHours.toFixed(1);
-        await this.dispatchOSNotification(
+        const sent = await this.dispatchOSNotification(
           `⚠️ Vence en menos de 24 horas (1 día): ${task.title}`,
           `Curso: ${task.course_name} — Plazo límite: ${new Date(task.deadline).toLocaleString('es-ES', {
             weekday: 'short',
@@ -174,9 +186,10 @@ class NotificationService {
           })} (~${hoursLeftFormatted}h restantes).`,
           'normal'
         );
+        if (!sent) continue;
 
-        await sqliteService.updateTask(task.id, { notified_24h: 1 });
-        await sqliteService.addNotificationLog({
+        await this.store.updateTask(task.id, { notified_24h: 1 });
+        await this.store.addNotificationLog({
           task_id: task.id,
           task_title: task.title,
           alert_type: '24_hours',
@@ -196,28 +209,31 @@ class NotificationService {
 
   // Prueba de notificación inmediata para verificación del usuario
   public async testAlert(type: AlertType, customTitle?: string, customCourse?: string) {
-    if (!this.isPermissionGranted()) {
+    if (!await this.refreshPermission()) {
       await this.requestPermission();
     }
+    if (!await this.refreshPermission()) throw new Error('Habilita las notificaciones en el sistema o navegador para enviar la prueba.');
 
     if (type === '12_hours') {
-      await this.dispatchOSNotification(
+      const sent = await this.dispatchOSNotification(
         `🚨 [Prueba 12h] Entrega Inminente: ${customTitle || 'Examen Parcial de Arquitectura'}`,
         `Curso: ${customCourse || 'Arquitectura de Software'} — Quedan menos de 12 horas para el cierre en el aula virtual.`,
         'high'
       );
-      await sqliteService.addNotificationLog({
+      if (!sent) throw new Error('No se pudo enviar la notificación de prueba.');
+      await this.store.addNotificationLog({
         task_id: 'test-12h',
         task_title: customTitle || 'Prueba de Alerta 12h',
         alert_type: '12_hours',
       });
     } else {
-      await this.dispatchOSNotification(
+      const sent = await this.dispatchOSNotification(
         `⚠️ [Prueba 24h] Recordatorio 1 Día Antes: ${customTitle || 'Laboratorio B-Trees'}`,
         `Curso: ${customCourse || 'Algoritmos y Estructuras'} — Queda exactamente 1 día para la entrega.`,
         'normal'
       );
-      await sqliteService.addNotificationLog({
+      if (!sent) throw new Error('No se pudo enviar la notificación de prueba.');
+      await this.store.addNotificationLog({
         task_id: 'test-24h',
         task_title: customTitle || 'Prueba de Alerta 24h',
         alert_type: '24_hours',
@@ -232,7 +248,7 @@ class NotificationService {
     if (this.intervalId !== null) return;
 
     // Ejecución inicial rápida
-    getTasksCb().then((tasks) => this.checkDeadlines(tasks));
+    getTasksCb().then((tasks) => this.checkDeadlines(tasks)).catch((error) => console.error('No se pudo iniciar el monitoreo:', error));
 
     // Revisar cada 20 segundos
     this.intervalId = window.setInterval(async () => {

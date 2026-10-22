@@ -1,3 +1,9 @@
+import schema from '../../src-tauri/migrations/01_init.sql?raw';
+import persistence from '../../src-tauri/migrations/02_local_persistence.sql?raw';
+import cargo from '../../src-tauri/Cargo.toml?raw';
+import config from '../../src-tauri/tauri.conf.json?raw';
+import backend from '../../src-tauri/src/lib.rs?raw';
+import capabilities from '../../src-tauri/capabilities/default.json?raw';
 import React, { useState } from 'react';
 import { getExecutedQueries, QueryLog } from '../db/sqlite';
 import { 
@@ -19,224 +25,17 @@ interface Props {
 }
 
 const FILES_DATA: Record<string, { title: string; lang: string; content: string }> = {
-  'schema.sql': {
-    title: 'Esquema SQLite Local (migrations/01_init.sql)',
-    lang: 'sql',
-    content: `-- =========================================================================
--- TaskEngine Tauri - Esquema SQLite para Ingeniería de Sistemas
--- =========================================================================
-
--- 1. Tabla de Cursos Universitarios
-CREATE TABLE IF NOT EXISTS courses (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    code TEXT,
-    semester TEXT,
-    color TEXT DEFAULT '#38bdf8',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Tabla Principal de Tareas con Estados y Alertas de 24h/12h
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    course_id TEXT NOT NULL,
-    course_name TEXT NOT NULL,
-    deadline DATETIME NOT NULL,
-    status TEXT CHECK(status IN ('pendiente', 'en_progreso', 'completada')) DEFAULT 'pendiente',
-    priority TEXT CHECK(priority IN ('baja', 'media', 'alta')) DEFAULT 'media',
-    description TEXT,
-    tags TEXT DEFAULT '[]',
-    notified_24h INTEGER DEFAULT 0, -- 0 = pendiente, 1 = enviada (1 día antes)
-    notified_12h INTEGER DEFAULT 0, -- 0 = pendiente, 1 = enviada (12 horas antes)
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline);
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_course ON tasks(course_id);
-
--- 3. Tabla de Auditoría de Notificaciones Enviadas
-CREATE TABLE IF NOT EXISTS notification_logs (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL,
-    task_title TEXT NOT NULL,
-    alert_type TEXT CHECK(alert_type IN ('24_hours', '12_hours', 'manual_test')),
-    triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
-);`,
-  },
-  'Cargo.toml': {
-    title: 'Dependencias Rust (src-tauri/Cargo.toml)',
-    lang: 'toml',
-    content: `[package]
-name = "taskengine-tauri"
-version = "0.1.0"
-description = "Gestor local de tareas universitarias con SQLite y System Tray"
-authors = ["Ingeniería de Sistemas"]
-edition = "2021"
-
-[lib]
-name = "taskengine_tauri_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
-[build-dependencies]
-tauri-build = { version = "2.0", features = [] }
-
-[dependencies]
-tauri = { version = "2.0", features = ["tray-icon"] }
-tauri-plugin-sql = { version = "2.0", features = ["sqlite"] }
-tauri-plugin-notification = "2.0"
-tauri-plugin-process = "2.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-tokio = { version = "1.0", features = ["full"] }`,
-  },
-  'tauri.conf.json': {
-    title: 'Configuración Tauri v2 (src-tauri/tauri.conf.json)',
-    lang: 'json',
-    content: `{
-  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/tooling/cli/schema.json",
-  "productName": "TaskEngine Tauri",
-  "version": "1.0.0",
-  "identifier": "com.sistemas.taskengine",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "TaskEngine - Ingeniería de Sistemas",
-        "width": 1280,
-        "height": 840,
-        "minWidth": 960,
-        "minHeight": 640,
-        "resizable": true,
-        "decorations": false,
-        "theme": "Dark"
-      }
-    ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "tooltip": "TaskEngine - Tareas Universitarias (En segundo plano)"
-    }
-  },
-  "plugins": {
-    "sql": {
-      "preload": ["sqlite:tasks_university.db"]
-    },
-    "notification": {}
-  }
-}`,
-  },
-  'lib.rs': {
-    title: 'Backend Rust & System Tray (src-tauri/src/lib.rs)',
-    lang: 'rust',
-    content: `// =========================================================================
-// TaskEngine Tauri - Configuración Rust con System Tray y Migraciones SQLite
-// =========================================================================
-
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
-};
-use tauri_plugin_sql::{Migration, MigrationKind};
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let migrations = vec![
-        Migration {
-            version: 1,
-            description: "create_initial_schema",
-            sql: include_str!("../migrations/01_init.sql"),
-            kind: MigrationKind::Up,
-        }
-    ];
-
-    tauri::Builder::default()
-        // 1. Inicialización del plugin de SQLite Local
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:tasks_university.db", migrations)
-                .build(),
-        )
-        // 2. Plugin de Notificaciones del Sistema Operativo
-        .plugin(tauri_plugin_notification::init())
-        // 3. Configuración del System Tray (Bandeja del Sistema)
-        .setup(|app| {
-            let show_i = MenuItem::with_id(app, "show", "Mostrar TaskEngine", true, None::<&str>)?;
-            let hide_i = MenuItem::with_id(app, "hide", "Minimizar a la Bandeja", true, None::<&str>)?;
-            let quit_i = MenuItem::with_id(app, "quit", "Cerrar Aplicación", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(app, &[&show_i, &hide_i, &quit_i])?;
-
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("TaskEngine - Ejecutándose en segundo plano")
-                .menu(&tray_menu)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
-                    "hide" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.hide();
-                        }
-                    }
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .build(app)?;
-
-            Ok(())
-        })
-        // 4. Interceptar evento de cierre para ocultar a bandeja en lugar de matar proceso
-        .on_window_event(|window, event| match event {
-            WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                let _ = window.hide();
-            }
-            _ => {}
-        })
-        .run(tauri::generate_context!())
-        .expect("Error al iniciar TaskEngine Tauri");
-}`,
-  },
-  'capabilities.json': {
-    title: 'Permisos de Seguridad Tauri v2 (src-tauri/capabilities/default.json)',
-    lang: 'json',
-    content: `{
-  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/tooling/cli/schema.json",
-  "identifier": "default",
-  "description": "Permisos para SQLite, Notificaciones y Ventana",
-  "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "core:window:allow-hide",
-    "core:window:allow-show",
-    "core:window:allow-close",
-    "sql:default",
-    "sql:allow-execute",
-    "sql:allow-select",
-    "notification:default",
-    "notification:allow-notify"
-  ]
-}`,
-  },
+ '01_init.sql': { title: 'src-tauri/migrations/01_init.sql', lang: 'sql', content: schema },
+ '02_local_persistence.sql': { title: 'src-tauri/migrations/02_local_persistence.sql', lang: 'sql', content: persistence },
+ 'Cargo.toml': { title: 'src-tauri/Cargo.toml', lang: 'toml', content: cargo },
+ 'tauri.conf.json': { title: 'src-tauri/tauri.conf.json', lang: 'json', content: config },
+ 'lib.rs': { title: 'src-tauri/src/lib.rs', lang: 'rust', content: backend },
+ 'default.json': { title: 'src-tauri/capabilities/default.json', lang: 'json', content: capabilities },
 };
 
 export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'files' | 'structure' | 'guide' | 'queries'>('files');
-  const [selectedFile, setSelectedFile] = useState<string>('schema.sql');
+  const [selectedFile, setSelectedFile] = useState<string>('01_init.sql');
   const [copied, setCopied] = useState(false);
   const [queries, setQueries] = useState<QueryLog[]>([]);
 
@@ -270,7 +69,7 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
                 Arquitectura de Código: React + Tauri v2 + SQLite Local
               </h2>
               <p className="text-xs text-neutral-400">
-                Archivos nativos generados listos para compilar en Windows, Linux y macOS
+                Archivos reales del proyecto · SQLite en escritorio y localStorage en la demostración web
               </p>
             </div>
           </div>
@@ -404,7 +203,7 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
 ├── src/                             # Frontend React + TypeScript
 │   ├── db/
 │   │   ├── sqlite.ts                # Capa de abstracción SQLite (Tauri IPC + fallback Web persistente)
-│   │   └── schema.sql               # Referencia del esquema SQL
+│   │   └── SQLiteManager.ts         # Persistencia nativa y demostración web
 │   ├── services/
 │   │   ├── notificationService.ts   # Motor de alertas nativas a 24h y 12h
 │   │   └── trayService.ts           # Control de bandeja del sistema y ejecución en segundo plano
@@ -415,9 +214,9 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
 │   │   ├── TaskBoard.tsx            # Vista tipo tablero Kanban
 │   │   ├── TaskList.tsx             # Vista tipo tabla/lista de alta densidad
 │   │   ├── TaskModal.tsx            # Formulario CRUD con validaciones y fechas
-│   │   ├── NotificationCenter.tsx   # Panel de auditoría de notificaciones y alertas de 24h/12h
+│   │   ├── NotificationCenterModal.tsx   # Panel de auditoría de notificaciones y alertas de 24h/12h
 │   │   ├── SystemTraySimulator.tsx  # Control interactivo de bandeja y segundo plano
-│   │   └── TauriProjectViewer.tsx   # Visualizador y exportador de archivos nativos
+│   │   └── TauriArchitectureModal.tsx   # Visualizador y exportador de archivos nativos
 │   ├── App.tsx                      # Orquestador principal
 │   └── main.tsx                     # Montaje de React
 └── package.json`}</pre>
@@ -439,14 +238,14 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
               <div className="space-y-2">
                 <span className="font-semibold text-sky-400">Paso 2: Instalar plugins de Tauri</span>
                 <div className="bg-neutral-950 p-3 rounded-lg border border-neutral-800 font-mono text-neutral-200">
-                  npm install @tauri-apps/api @tauri-apps/plugin-sql @tauri-apps/plugin-notification
+                  npm ci
                 </div>
               </div>
 
               <div className="space-y-2">
                 <span className="font-semibold text-sky-400">Paso 3: Ejecutar en modo desarrollo nativo</span>
                 <div className="bg-neutral-950 p-3 rounded-lg border border-neutral-800 font-mono text-neutral-200">
-                  npx @tauri-apps/cli dev
+                  npm run desktop:dev
                 </div>
                 <p className="text-neutral-400">
                   Esto levantará la ventana nativa de Tauri en Windows/Linux/macOS con la base de datos local SQLite y el System Tray activo.
@@ -456,7 +255,7 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
               <div className="space-y-2">
                 <span className="font-semibold text-sky-400">Paso 4: Compilar ejecutable de producción (.exe / .dmg / .deb)</span>
                 <div className="bg-neutral-950 p-3 rounded-lg border border-neutral-800 font-mono text-neutral-200">
-                  npx @tauri-apps/cli build
+                  npm run desktop:build
                 </div>
               </div>
             </div>
@@ -467,10 +266,10 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-neutral-200">
-                    Consultas SQLite Ejecutadas en Vivo
+                    Operaciones de almacenamiento de esta sesión
                   </h3>
                   <p className="text-xs text-neutral-400">
-                    Registro de todas las operaciones SQL realizadas por la UI sobre el motor SQLite
+                    En escritorio se muestran consultas SQLite reales y su duración. La demostración web usa localStorage.
                   </p>
                 </div>
                 <button
@@ -493,7 +292,7 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
                       className="bg-neutral-950 border border-neutral-800 rounded-lg p-3 font-mono text-xs space-y-1"
                     >
                       <div className="flex items-center justify-between text-[11px] text-neutral-500">
-                        <span className="text-sky-400">SQL QUERY</span>
+                        <span className="text-sky-400">OPERACIÓN</span>
                         <span>{q.timestamp} · {q.durationMs}ms</span>
                       </div>
                       <div className="text-neutral-200 whitespace-pre-wrap">{q.sql}</div>
@@ -513,7 +312,7 @@ export const TauriArchitectureModal: React.FC<Props> = ({ isOpen, onClose }) => 
         {/* Modal Footer */}
         <div className="px-6 py-3 border-t border-neutral-800 bg-neutral-950 flex justify-between items-center text-xs">
           <span className="text-neutral-500">
-            TaskEngine Tauri v2 Architecture Package
+            TaskEngine V1 · Arquitectura local
           </span>
           <button
             onClick={onClose}

@@ -3,20 +3,10 @@
  * Funciona de manera transparente tanto en el ejecutable de escritorio Tauri como en el preview web.
  */
 
-export const isTauri = (): boolean => {
-  return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
-};
+import { isTauri as detectTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import * as notification from '@tauri-apps/plugin-notification';
 
-export const getTauriWindow = () => {
-  if (typeof window !== 'undefined' && (window as any).__TAURI__?.window) {
-    return (window as any).__TAURI__.window.getCurrentWindow();
-  }
-  return null;
-};
-
-export const getTauriNotification = () => {
-  if (typeof window !== 'undefined' && (window as any).__TAURI__?.notification) {
-    return (window as any).__TAURI__.notification;
-  }
-  return null;
-};
+export const isTauri = (): boolean => typeof window !== 'undefined' && detectTauri();
+export const getTauriWindow = () => isTauri() ? getCurrentWindow() : null;
+export const getTauriNotification = () => isTauri() ? notification : null;

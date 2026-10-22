@@ -12,6 +12,7 @@ import {
   Radio
 } from 'lucide-react';
 import { isTauriEnvironment } from '../db/sqlite';
+import { getTauriWindow } from '../utils/tauriBridge';
 
 interface Props {
   activeView: 'board' | 'list';
@@ -37,13 +38,13 @@ export const Header: React.FC<Props> = ({
   return (
     <header className="bg-neutral-900 border-b border-neutral-800 text-neutral-200 select-none">
       {/* Top Titlebar Strip / Window Controls */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-neutral-950 border-b border-neutral-800/60 text-xs text-neutral-400">
+      <div data-tauri-drag-region className="flex items-center justify-between px-4 py-1.5 bg-neutral-950 border-b border-neutral-800/60 text-xs text-neutral-400">
         <div className="flex items-center gap-2">
           {/* Indicador de entorno */}
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-mono text-[11px] text-neutral-400">
-              {isTauri ? 'Tauri Runtime v2 · SQLite Local' : 'Tauri Desktop Sandbox · SQLite Local'}
+              {isTauri ? 'Tauri v2 · SQLite local' : 'Demostración web · almacenamiento del navegador'}
             </span>
           </div>
           <span className="text-neutral-600">|</span>
@@ -60,6 +61,8 @@ export const Header: React.FC<Props> = ({
             <Minus className="w-3.5 h-3.5" />
           </button>
           <button
+            onClick={() => { void getTauriWindow()?.toggleMaximize(); }}
+            disabled={!isTauri}
             title="Maximizar ventana"
             className="p-1 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-100 rounded transition-colors"
           >

@@ -19,7 +19,13 @@ pub fn run() {
             description: "create_initial_schema",
             sql: include_str!("../migrations/01_init.sql"),
             kind: MigrationKind::Up,
-        }
+        },
+        Migration {
+            version: 2,
+            description: "local_persistence_and_notification_history",
+            sql: include_str!("../migrations/02_local_persistence.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -35,7 +41,8 @@ pub fn run() {
         .setup(|app| {
             // Configurar menú de la bandeja
             let show_i = MenuItem::with_id(app, "show", "Mostrar TaskEngine", true, None::<&str>)?;
-            let hide_i = MenuItem::with_id(app, "hide", "Minimizar a la Bandeja", true, None::<&str>)?;
+            let hide_i =
+                MenuItem::with_id(app, "hide", "Minimizar a la Bandeja", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Cerrar Aplicación", true, None::<&str>)?;
 
             let tray_menu = Menu::with_items(app, &[&show_i, &hide_i, &quit_i])?;

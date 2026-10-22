@@ -238,11 +238,11 @@ export const TaskList: React.FC<Props> = ({
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm(`¿Eliminar la tarea "${task.title}" de SQLite?`)) {
+                          if (confirm(`¿Eliminar la tarea "${task.title}"?`)) {
                             onDelete(task.id);
                           }
                         }}
-                        title="Eliminar de SQLite"
+                        title="Eliminar tarea"
                         className="p-1 rounded text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
