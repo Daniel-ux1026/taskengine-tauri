@@ -77,6 +77,8 @@ La auditoría automatizada citada es la de **npm**, con el estado del registro e
 
 La carpeta de compilación original conservaba rutas de otra ubicación del proyecto. Se empleó una carpeta nueva `CARGO_TARGET_DIR` para el empaquetado local. Esta carpeta y el respaldo preventivo de la base anterior están excluidos de Git.
 
+No se completó una prueba manual de la ventana nativa ni del proceso de instalación en esta sesión: el acceso de la herramienta de control de Windows agotó su tiempo de autorización al intentar abrir el ejecutable. El código Rust y el empaquetado sí se comprobaron. Las capturas y las pruebas manuales de interacción corresponden al navegador. Antes de distribuir la aplicación en un entorno institucional, conviene hacer una instalación y una prueba de bandeja y notificaciones en el equipo de destino.
+
 ## Trabajo posterior recomendado
 
 1. Exportación y restauración de datos con respaldo verificable antes de operaciones importantes.
